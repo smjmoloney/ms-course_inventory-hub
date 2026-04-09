@@ -1,0 +1,27 @@
+@* ProductList.razor - Reusable presentation component for displaying a product list.
+   Extracted into a child component as part of the project structure requirements,
+   separating data-fetching (FetchProducts.razor) from rendering logic.
+   Copilot added null-coalescing on Category?.Name so products with no assigned
+   category display "Uncategorised" rather than throwing a NullReferenceException. *@
+
+<ul>
+    @if (Products != null)
+    {
+        @foreach (var product in Products)
+        {
+            @* Null-coalesces Category?.Name in case a product has no category assigned. *@
+            <li>@product.Name - $@product.Price <em>(@(product.Category?.Name ?? "Uncategorised"))</em></li>
+        }
+    }
+    else
+    {
+        <li>Loading...</li>
+    }
+</ul>
+
+@code {
+    // Products is passed in from the parent page via parameter binding,
+    // keeping this component stateless and independently testable.
+    [Parameter]
+    public Product[]? Products { get; set; }
+}

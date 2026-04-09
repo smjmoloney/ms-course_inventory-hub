@@ -1,0 +1,113 @@
+@* FetchProducts.razor - Page component responsible for fetching and displaying products.
+   Copilot role:
+   - Implemented the project structure and all code from prompts and assignment steps.
+   - Diagnosed the StateHasChanged() bug: Blazor batches re-renders and would not
+     show the loading banner until after the await completed. Calling StateHasChanged()
+     before the await forces an immediate re-render.
+   - Implemented the RunTest() helper to centralise the isLoading/StateHasChanged
+     logic that would otherwise be duplicated in every button handler.
+   - Fixed CS0542 (member name same as enclosing type) — the initial fetch method was
+     named FetchProducts, which conflicted with the Razor page's generated class name;
+     renamed to avoid the compile error. *@
+
+@page "/fetchproducts"
+@inject ProductService productService
+
+<h3>Product List</h3>
+
+@if (isLoading)
+{
+    <div class="status-banner loading">
+        <span>⏳</span>
+        <span><strong>@loadingMessage</strong></span>
+    </div>
+}
+else if (!string.IsNullOrEmpty(errorMessage))
+{
+    <div class="status-banner error">
+        <span>❌</span> <strong>Error:</strong> @errorMessage
+    </div>
+}
+else
+{
+    <div class="status-banner success">
+        <span>✅</span> <strong>Success:</strong> Loaded @products?.Length product(s).
+    </div>
+    <ProductList Products="products" />
+}
+
+<!-- Test Error Scenarios -->
+<div class="test-panel">
+    <h4>🧪 Test Error Handling <small style="font-weight: normal; color: #666;">(for Peer Review)</small></h4>
+    <div class="test-buttons">
+        <button class="btn btn-green @(activeTest == "normal" ? "active-test" : "")"
+            disabled="@isLoading" @onclick="LoadAsync"
+            title="Fetches real product data from the API.">
+            ✅ Normal Request
+        </button>
+        <button class="btn btn-orange @(activeTest == "timeout" ? "active-test" : "")"
+            disabled="@isLoading" @onclick="TestTimeoutAsync"
+            title="Server delays 15s — client cuts off after 5s and shows a timeout error.">
+            ⏱ Test Timeout (~5s)
+        </button>
+        <button class="btn btn-red @(activeTest == "invalid" ? "active-test" : "")"
+            disabled="@isLoading" @onclick="TestInvalidAsync"
+            title="Server returns malformed JSON — client shows an invalid response error.">
+            ⚠ Test Invalid JSON
+        </button>
+        <button class="btn btn-grey @(activeTest == "empty" ? "active-test" : "")"
+            disabled="@isLoading" @onclick="TestEmptyAsync"
+            title="Server responds successfully but returns no products — client shows 'no products found'.">
+            📭 Test No Data
+        </button>
+        <button class="btn btn-grey @(activeTest == "null" ? "active-test" : "")"
+            disabled="@isLoading" @onclick="TestNullAsync"
+            title="Server returns null instead of a product array — client handles it gracefully.">
+            🚫 Test Null Response
+        </button>
+    </div>
+</div>
+
+@code {
+    private Product[]? products;
+    private string errorMessage = string.Empty;
+    private bool isLoading = true;
+    private string loadingMessage = "Loading products...";
+
+    // Tracks which test button was last pressed so the active-test CSS pulse
+    // animation applies only to that button while the request is in flight.
+    private string activeTest = string.Empty;
+
+    protected override async Task OnInitializedAsync() => await LoadAsync();
+
+    // Each handler sets its own loading message before delegating to RunTest(),
+    // so the user sees context-specific feedback (e.g. "waiting ~5 seconds...")
+    // rather than a generic "loading" message.
+    private async Task LoadAsync(MouseEventArgs? e = null) => await RunTest("normal", "Loading products...", null);
+    private async Task TestTimeoutAsync(MouseEventArgs e) => await RunTest("timeout", "Testing timeout — waiting ~5 seconds...", "timeout");
+    private async Task TestInvalidAsync(MouseEventArgs e) => await RunTest("invalid", "Testing invalid JSON response...", "invalid");
+    private async Task TestEmptyAsync(MouseEventArgs e) => await RunTest("empty", "Testing empty response...", "empty");
+    private async Task TestNullAsync(MouseEventArgs e) => await RunTest("null", "Testing null response...", "null");
+
+    // Centralised test runner. Sets loading state and forces a re-render via
+    // StateHasChanged() before awaiting the async service call.
+    // Without StateHasChanged(), Blazor batches the re-render until after the
+    // await completes, so the loading banner would never appear during the request.
+    private async Task RunTest(string testName, string message, string? errorMode)
+    {
+        activeTest = testName;
+        loadingMessage = message;
+        isLoading = true;
+        StateHasChanged();
+        await ApplyResult(await productService.GetProductsAsync(errorMode));
+    }
+
+    // Applies the (Data, Error) tuple returned by ProductService to component state,
+    // keeping state updates in one place so each handler stays a single expression.
+    private Task ApplyResult((Product[]? Data, string? Error) result)
+    {
+        isLoading = false;
+        (products, errorMessage) = (result.Data, result.Error ?? string.Empty);
+        return Task.CompletedTask;
+    }
+}
